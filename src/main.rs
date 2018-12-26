@@ -1,57 +1,28 @@
 use image;
-use num::{One, Zero};
 use std::env;
-use std::ops::{Add, Mul};
 
 use tachibana::color::Color;
+use tachibana::ray::Ray;
+use tachibana::shape::{Shape, Shapes, Sphere};
 use tachibana::vec::Vec3;
 
-type Precision = f64;
-
-#[derive(Clone, Copy, Debug)]
-pub struct Ray<T> {
-    pub origin: Vec3<T>,
-    pub direction: Vec3<T>,
-}
-
-impl<T> Ray<T>
-where
-    T: Copy,
-    Vec3<T>: Add<Vec3<T>, Output = Vec3<T>>,
-    Vec3<T>: Mul<T, Output = Vec3<T>>,
-{
-    pub fn point_at(self, t: T) -> Vec3<T> {
-        self.origin + self.direction * t
-    }
-}
-
-fn hit_sphere(center: &Vec3<Precision>, radius: Precision, r: &Ray<Precision>) -> bool {
-    let oc = r.origin - *center;
-    let a = r.direction.dot(r.direction);
-    let b = oc.dot(r.direction) * 2.;
-    let c = oc.dot(oc) - radius * radius;
-    let discriminant = b * b - 4. * a * c;
-    discriminant > 0.
-}
-
-fn color(r: &Ray<Precision>) -> Color {
-    let center = Vec3 {
-        x: 0.,
-        y: 0.,
-        z: -1.,
-    };
-
-    if hit_sphere(&center, 0.5, r) {
-        Color::RED
+fn color(r: &Ray, world: &Shapes) -> Color {
+    if let Some(rec) = world.hit(r, 0., std::f64::MAX) {
+        let c = Vec3 {
+            x: rec.normal.x + 1.,
+            y: rec.normal.y + 1.,
+            z: rec.normal.z + 1.,
+        } * 0.5;
+        c.into()
     } else {
         let unit_direction = r.direction.unit();
-        let t = 0.5 * (unit_direction.y + 1.);
+        let t = (unit_direction.y + 1.) * 0.5;
         let color = Vec3 {
             x: 0.5,
             y: 0.7,
             z: 1.,
         };
-        let c = Vec3::one() * (1. - t) + color * t;
+        let c = Vec3::ONE * (1. - t) + color * t;
         c.into()
     }
 }
@@ -85,17 +56,25 @@ fn main() {
         z: 0.,
     };
 
+    #[rustfmt::skip]
+    let shapes: Shapes = {
+        let mut s = Shapes::new();
+        s.add(Sphere{ center: Vec3{x: 0., y:    0. , z: -1.}, radius:   0.5 });
+        s.add(Sphere{ center: Vec3{x: 0., y: -100.5, z: -1.}, radius: 100. });
+        s
+    };
+
     let mut buf = image::ImageBuffer::new(width, height);
 
     for y in 0..height {
         for x in 0..width {
-            let u = Precision::from(x) / Precision::from(width);
-            let v = Precision::from(y) / Precision::from(height);
+            let u = f64::from(x) / f64::from(width);
+            let v = f64::from(y) / f64::from(height);
             let ray = Ray {
-                origin: Vec3::zero(),
+                origin: Vec3::ZERO,
                 direction: lower_left_corner + horizontal * u + vertical * v,
             };
-            let color = color(&ray);
+            let color = color(&ray, &shapes);
 
             let p = buf.get_pixel_mut(x, height - y - 1); // write image starting from the bottom row
             *p = image::Rgb(color.into());

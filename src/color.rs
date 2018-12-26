@@ -24,20 +24,9 @@ impl Into<[u8; 3]> for Color {
     }
 }
 
-impl From<Vec3<f32>> for Color {
+impl From<Vec3> for Color {
     #[inline]
-    fn from(a: Vec3<f32>) -> Self {
-        Color {
-            r: (a.x * 255.99) as u8,
-            g: (a.y * 255.99) as u8,
-            b: (a.z * 255.99) as u8,
-        }
-    }
-}
-
-impl From<Vec3<f64>> for Color {
-    #[inline]
-    fn from(a: Vec3<f64>) -> Self {
+    fn from(a: Vec3) -> Self {
         Color {
             r: (a.x * 255.99) as u8,
             g: (a.y * 255.99) as u8,
