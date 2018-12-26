@@ -25,16 +25,35 @@ where
     }
 }
 
+fn hit_sphere(center: &Vec3<Precision>, radius: Precision, r: &Ray<Precision>) -> bool {
+    let oc = r.origin - *center;
+    let a = r.direction.dot(r.direction);
+    let b = oc.dot(r.direction) * 2.;
+    let c = oc.dot(oc) - radius * radius;
+    let discriminant = b * b - 4. * a * c;
+    discriminant > 0.
+}
+
 fn color(r: &Ray<Precision>) -> Color {
-    let unit_direction = r.direction.unit();
-    let t = 0.5 * (unit_direction.y + 1.);
-    let color = Vec3 {
-        x: 0.5,
-        y: 0.7,
-        z: 1.,
+    let center = Vec3 {
+        x: 0.,
+        y: 0.,
+        z: -1.,
     };
-    let c = Vec3::one() * (1. - t) + color * t;
-    c.into()
+
+    if hit_sphere(&center, 0.5, r) {
+        Color::RED
+    } else {
+        let unit_direction = r.direction.unit();
+        let t = 0.5 * (unit_direction.y + 1.);
+        let color = Vec3 {
+            x: 0.5,
+            y: 0.7,
+            z: 1.,
+        };
+        let c = Vec3::one() * (1. - t) + color * t;
+        c.into()
+    }
 }
 
 fn main() {
