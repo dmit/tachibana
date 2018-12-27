@@ -7,3 +7,15 @@ edition = "2018"
 [dependencies]
 image = "0.20"
 rand = "0.6"
+rand_pcg = "0.1"
+
+[profile.release]
+opt-level = 3
+debug = true
+rpath = false
+lto = true
+debug-assertions = false
+codegen-units = 16
+panic = 'unwind'
+incremental = false
+overflow-checks = false

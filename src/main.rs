@@ -1,5 +1,6 @@
 use image;
 use rand::prelude::*;
+use rand_pcg::Pcg64Mcg;
 use std::env;
 
 use tachibana::color::Color;
@@ -7,15 +8,34 @@ use tachibana::ray::{Camera, Ray};
 use tachibana::shape::{Shape, Shapes, Sphere};
 use tachibana::vec::Vec3;
 
-fn color_vec(r: &Ray, world: &Shapes) -> Vec3 {
-    if let Some(rec) = world.hit(r, 0., std::f64::MAX) {
-        Vec3 {
-            x: rec.normal.x + 1.,
-            y: rec.normal.y + 1.,
-            z: rec.normal.z + 1.,
-        } * 0.5
+fn random_in_unit_sphere(rng: &mut impl Rng) -> Vec3 {
+    let mut p: Vec3;
+    while {
+        let rnd = Vec3 {
+            x: rng.gen(),
+            y: rng.gen(),
+            z: rng.gen(),
+        };
+        p = rnd * 2. - Vec3::ONE;
+
+        p.squared_length() >= 1.
+    } {}
+
+    p
+}
+
+fn color_vec(ray: &Ray, world: &Shapes, rng: &mut impl Rng) -> Vec3 {
+    if let Some(rec) = world.hit(ray, 0.001, std::f64::MAX) {
+        let rnd = random_in_unit_sphere(rng);
+        let target = rec.point + rec.normal + rnd;
+
+        let new_ray = Ray {
+            origin: rec.point,
+            direction: target - rec.point,
+        };
+        color_vec(&new_ray, world, rng) * 0.5
     } else {
-        let unit_direction = r.direction.unit();
+        let unit_direction = ray.direction.unit();
         let t = (unit_direction.y + 1.) * 0.5;
         let color = Vec3 {
             x: 0.5,
@@ -54,7 +74,7 @@ fn main() {
 
     let mut buf = image::ImageBuffer::new(width, height);
     let camera = Camera::default();
-    let mut rng = rand::thread_rng();
+    let mut rng = Pcg64Mcg::new(rand::thread_rng().gen());
 
     for y in 0..height {
         for x in 0..width {
@@ -63,10 +83,10 @@ fn main() {
                     let u = (f64::from(x) + rng.gen::<f64>()) / f64::from(width);
                     let v = (f64::from(y) + rng.gen::<f64>()) / f64::from(height);
                     let ray = camera.ray(u, v);
-                    let c = color_vec(&ray, &shapes);
+                    let c = color_vec(&ray, &shapes, &mut rng);
                     acc + c
                 }) / f64::from(num_rays);
-                c.into()
+                c.map(|f| f.sqrt()).into()
             };
 
             let p = buf.get_pixel_mut(x, height - y - 1); // write image starting from the bottom row

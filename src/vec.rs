@@ -21,6 +21,15 @@ impl Vec3 {
     };
 
     #[inline]
+    pub fn map<F: Fn(f64) -> f64>(&self, f: F) -> Vec3 {
+        Vec3 {
+            x: f(self.x),
+            y: f(self.y),
+            z: f(self.z),
+        }
+    }
+
+    #[inline]
     pub fn squared_length(self) -> f64 {
         self.x * self.x + self.y * self.y + self.z * self.z
     }
