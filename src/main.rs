@@ -4,47 +4,10 @@ use rand_pcg::Pcg64Mcg;
 use std::env;
 
 use tachibana::color::Color;
-use tachibana::ray::{Camera, Ray};
-use tachibana::shape::{Shape, Shapes, Sphere};
+use tachibana::material::Material;
+use tachibana::ray::Camera;
+use tachibana::shape::{Shapes, Sphere};
 use tachibana::vec::Vec3;
-
-fn random_in_unit_sphere(rng: &mut impl Rng) -> Vec3 {
-    let mut p: Vec3;
-    while {
-        let rnd = Vec3 {
-            x: rng.gen(),
-            y: rng.gen(),
-            z: rng.gen(),
-        };
-        p = rnd * 2. - Vec3::ONE;
-
-        p.squared_length() >= 1.
-    } {}
-
-    p
-}
-
-fn color_vec(ray: &Ray, world: &Shapes, rng: &mut impl Rng) -> Vec3 {
-    if let Some(rec) = world.hit(ray, 0.001, std::f64::MAX) {
-        let rnd = random_in_unit_sphere(rng);
-        let target = rec.point + rec.normal + rnd;
-
-        let new_ray = Ray {
-            origin: rec.point,
-            direction: target - rec.point,
-        };
-        color_vec(&new_ray, world, rng) * 0.5
-    } else {
-        let unit_direction = ray.direction.unit();
-        let t = (unit_direction.y + 1.) * 0.5;
-        let color = Vec3 {
-            x: 0.5,
-            y: 0.7,
-            z: 1.,
-        };
-        Vec3::ONE * (1. - t) + color * t
-    }
-}
 
 fn main() {
     let mut args = env::args().skip(1).take(3).map(|x| x.parse::<u32>());
@@ -67,8 +30,10 @@ fn main() {
     #[rustfmt::skip]
     let shapes: Shapes = {
         let mut s = Shapes::new();
-        s.add(Sphere{ center: Vec3{x: 0., y:    0. , z: -1.}, radius:   0.5 });
-        s.add(Sphere{ center: Vec3{x: 0., y: -100.5, z: -1.}, radius: 100. });
+        s.add(Sphere{ center: Vec3{x:  0., y:    0. , z: -1.}, radius:   0.5, material: Material::Lambertian(Vec3{x: 0.8, y: 0.3, z: 0.3})});
+        s.add(Sphere{ center: Vec3{x:  0., y: -100.5, z: -1.}, radius: 100. , material: Material::Lambertian(Vec3{x: 0.8, y: 0.8, z: 0.0})});
+        s.add(Sphere{ center: Vec3{x:  1., y:    0. , z: -1.}, radius:   0.5, material: Material::Metal(Vec3{x: 0.8, y: 0.6, z: 0.2}, 1.0)});
+        s.add(Sphere{ center: Vec3{x: -1., y:    0. , z: -1.}, radius:   0.5, material: Material::Metal(Vec3{x: 0.8, y: 0.8, z: 0.8}, 0.3)});
         s
     };
 
@@ -83,7 +48,7 @@ fn main() {
                     let u = (f64::from(x) + rng.gen::<f64>()) / f64::from(width);
                     let v = (f64::from(y) + rng.gen::<f64>()) / f64::from(height);
                     let ray = camera.ray(u, v);
-                    let c = color_vec(&ray, &shapes, &mut rng);
+                    let c = tachibana::color_vec(&ray, &shapes, 0, &mut rng);
                     acc + c
                 }) / f64::from(num_rays);
                 c.map(|f| f.sqrt()).into()

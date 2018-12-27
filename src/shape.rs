@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 
+use crate::material::Material;
 use crate::ray::Ray;
 use crate::vec::Vec3;
 
@@ -8,6 +9,7 @@ pub struct HitRecord {
     pub distance: f64,
     pub point: Vec3,
     pub normal: Vec3,
+    pub material: Material,
 }
 
 pub trait Shape: Debug {
@@ -18,6 +20,7 @@ pub trait Shape: Debug {
 pub struct Sphere {
     pub center: Vec3,
     pub radius: f64,
+    pub material: Material,
 }
 
 impl Shape for Sphere {
@@ -36,6 +39,7 @@ impl Shape for Sphere {
                     distance: t,
                     point,
                     normal: (point - self.center) / self.radius,
+                    material: self.material,
                 };
                 return Some(rec);
             }
@@ -47,6 +51,7 @@ impl Shape for Sphere {
                     distance: t,
                     point,
                     normal: (point - self.center) / self.radius,
+                    material: self.material,
                 };
                 return Some(rec);
             }
