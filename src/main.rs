@@ -60,10 +60,20 @@ fn main() {
 
     #[rustfmt::skip]
     let camera = {
-        let look_from = Vec3 { x: -2., y: 2., z:  1. };
-        let look_at   = Vec3 { x:  0., y: 0., z: -1. };
-        let view_up   = Vec3 { x:  0., y: 1., z:  0. };
-        Camera::new(look_from, look_at, view_up, 90., f64::from(width) / f64::from(height))
+        let look_from = Vec3 { x: 3., y: 3., z:  2. };
+        let look_at   = Vec3 { x: 0., y: 0., z: -1. };
+        let view_up   = Vec3 { x: 0., y: 1., z:  0. };
+        let focus_dist = (look_from - look_at).length();
+
+        Camera::new(
+            look_from,
+            look_at,
+            view_up,
+            90.,
+            f64::from(width) / f64::from(height),
+            2.0,
+            focus_dist
+        )
     };
 
     let total_rays = width * height * rays_per_pixel;
@@ -87,7 +97,7 @@ fn main() {
                 let c = (0..rays_per_pixel).fold(Vec3::ZERO, |acc, _| {
                     let u = (f64::from(x) + rng.gen::<f64>()) / f64::from(width);
                     let v = (f64::from(y) + rng.gen::<f64>()) / f64::from(height);
-                    let ray = camera.ray(u, v);
+                    let ray = camera.ray(u, v, &mut rng);
                     let c = tachibana::color_vec(&ray, &shapes, 0, &mut rng);
 
                     rays_rendered += 1;
