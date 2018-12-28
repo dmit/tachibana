@@ -2,9 +2,11 @@
 
 use image;
 use rand::prelude::*;
-use rand_pcg::Pcg64Mcg;
+use rayon::prelude::*;
 use std::env;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Instant;
+use xoshiro::Xoshiro256Plus;
 
 use tachibana::color::Color;
 use tachibana::material::Material;
@@ -70,7 +72,8 @@ fn main() {
         _ => 500,
     };
 
-    let mut rng = Pcg64Mcg::new(rand::thread_rng().gen());
+    let rng_seed = rand::thread_rng().gen();
+    let mut rng = Xoshiro256Plus::from_seed_u64(rng_seed);
 
     let shapes: Shapes = {
         let mut s = Shapes::new();
@@ -212,52 +215,62 @@ fn main() {
     };
 
     let total_rays = width * height * rays_per_pixel;
-    let ten_percent = total_rays / 10;
+    let ten_percent = total_rays as usize / 10;
     let mut buf = image::ImageBuffer::new(width, height);
 
     println!(
-        "Rendering {}x{} image with {} spheres and {} rays per pixel = {} total rays",
+        "Rendering {}x{} image with {} spheres and {} rays per pixel = {} total rays (seed: {:x})",
         width,
         height,
         shapes.size(),
         rays_per_pixel,
-        delimited_int(',', total_rays)
+        delimited_int(',', total_rays),
+        rng_seed,
     );
 
-    let mut rays_rendered: u32 = 0;
+    let rays_counter = AtomicUsize::new(0);
     let start_time = Instant::now();
 
-    for y in 0..height {
-        for x in 0..width {
-            let color: Color = {
-                let c = (0..rays_per_pixel).fold(Vec3::ZERO, |acc, _| {
-                    let u = (f64::from(x) + rng.gen::<f64>()) / f64::from(width);
-                    let v = (f64::from(y) + rng.gen::<f64>()) / f64::from(height);
-                    let ray = camera.ray(u, v, &mut rng);
-                    let c = tachibana::color_vec(&ray, &shapes, 0, &mut rng);
+    let coords: Vec<(u32, u32)> = (0..height)
+        .flat_map(|y| (0..width).map(move |x| (x, y)))
+        .collect();
 
-                    rays_rendered += 1;
-                    if rays_rendered % ten_percent == 0 {
-                        let duration = start_time.elapsed();
-                        let rays_per_s = f64::from(rays_rendered) / duration.as_float_secs();
-                        println!(
-                            "{:3}0% {:4}.{:0<3}s ({} rays/s)",
-                            rays_rendered / ten_percent,
-                            duration.as_secs(),
-                            duration.subsec_millis(),
-                            delimited_int(',', rays_per_s.round() as i64)
-                        );
-                    }
+    let pixels: Vec<Color> = coords
+        .par_iter()
+        .map(|&(x, y)| {
+            let y = height - y - 1; // tracer renders bottom to top
+            let mut rng = Xoshiro256Plus::from_seed_u64(rand::thread_rng().gen());
 
-                    acc + c
-                }) / f64::from(rays_per_pixel);
-                c.map(|f| f.sqrt()).into()
-            };
+            let c_vec = (0..rays_per_pixel).fold(Vec3::ZERO, |acc, _| {
+                let u = (f64::from(x) + rng.gen::<f64>()) / f64::from(width);
+                let v = (f64::from(y) + rng.gen::<f64>()) / f64::from(height);
+                let ray = camera.ray(u, v, &mut rng);
+                let c = tachibana::color_vec(&ray, &shapes, 0, &mut rng);
 
-            let p = buf.get_pixel_mut(x, height - y - 1); // write image starting from the bottom row
-            *p = image::Rgb(color.into());
-        }
-    }
+                let rays_rendered = rays_counter.fetch_add(1, Ordering::Relaxed) + 1;
+                if rays_rendered % ten_percent == 0 {
+                    let duration = start_time.elapsed();
+                    let rays_per_s = rays_rendered as f64 / duration.as_float_secs();
+                    println!(
+                        "{:3}0% {:4}.{:0<3}s ({} rays/s)",
+                        rays_rendered / ten_percent,
+                        duration.as_secs(),
+                        duration.subsec_millis(),
+                        delimited_int(',', rays_per_s.round() as i64)
+                    );
+                }
+
+                acc + c
+            }) / f64::from(rays_per_pixel);
+
+            c_vec.map(|f| f.sqrt()).into()
+        })
+        .collect();
+
+    buf.enumerate_pixels_mut().for_each(|(x, y, p)| {
+        let c = pixels[(y * width + x) as usize];
+        *p = image::Rgb(c.as_array());
+    });
 
     buf.save("out.png").expect("Unable to write output file");
 }

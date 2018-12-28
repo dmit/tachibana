@@ -16,10 +16,8 @@ impl Color {
     pub const BLUE : Color = Color{r: 0      , g: 0      , b: u8::MAX};
     pub const WHITE: Color = Color{r: u8::MAX, g: u8::MAX, b: u8::MAX};
     pub const BLACK: Color = Color{r: 0      , g: 0      , b: 0      };
-}
 
-impl Into<[u8; 3]> for Color {
-    fn into(self) -> [u8; 3] {
+    pub fn as_array(self) -> [u8; 3] {
         [self.r, self.g, self.b]
     }
 }

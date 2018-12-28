@@ -12,7 +12,7 @@ pub struct HitRecord {
     pub material: Material,
 }
 
-pub trait Shape: Debug {
+pub trait Shape: Debug + Sync {
     fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord>;
 }
 
