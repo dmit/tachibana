@@ -28,51 +28,186 @@ fn delimited_int<T: ToString>(delim: char, value: T) -> String {
 }
 
 fn main() {
-    let mut args = env::args().skip(1).take(3).map(|x| x.parse::<u32>());
-    let width: u32 = match args.next() {
+    let mut args = env::args();
+    let app_name = args.next().unwrap_or_else(|| "raytracer".to_string());
+    let exit_with_usage = |msg: String| -> ! {
+        eprintln!(
+            "{}\n\n{}",
+            msg,
+            format!(
+                "Usage: {} <width> <height> <rays per pixel> <number of spheres>",
+                app_name
+            )
+        );
+        std::process::exit(1)
+    };
+
+    let mut params = args.take(4).map(|x| x.parse::<u32>());
+    let width: u32 = match params.next() {
         Some(Ok(w)) => w,
-        Some(Err(e)) => panic!("Invalid format for image width: {}", e),
+        Some(Err(e)) => exit_with_usage(format!("Invalid format for image width: {}", e)),
         _ => 2048,
     };
-    let height: u32 = match args.next() {
+    let height: u32 = match params.next() {
         Some(Ok(h)) => h,
-        Some(Err(e)) => panic!("Invalid format for image height: {}", e),
+        Some(Err(e)) => exit_with_usage(format!("Invalid format for image height: {}", e)),
         _ => width / 2,
     };
-    let rays_per_pixel: u32 = match args.next() {
+    let rays_per_pixel: u32 = match params.next() {
         Some(Ok(n)) => n,
-        Some(Err(e)) => panic!("Invalid format for number of rays per pixel: {}", e),
+        Some(Err(e)) => exit_with_usage(format!(
+            "Invalid format for number of rays per pixel: {}",
+            e
+        )),
         _ => 100,
+    };
+    let max_spheres: u32 = match params.next() {
+        Some(Ok(n)) => n,
+        Some(Err(e)) => exit_with_usage(format!(
+            "Invalid format for maximum number of spheres: {}",
+            e
+        )),
+        _ => 500,
     };
 
     let mut rng = Pcg64Mcg::new(rand::thread_rng().gen());
 
-    #[rustfmt::skip]
     let shapes: Shapes = {
         let mut s = Shapes::new();
-        s.add(Sphere{ center: Vec3{x:  0., y:    0. , z: -1.}, radius:   0.5 , material: Material::Lambertian(Vec3{x: 0.1, y: 0.2, z: 0.5})});
-        s.add(Sphere{ center: Vec3{x:  0., y: -100.5, z: -1.}, radius: 100.  , material: Material::Lambertian(Vec3{x: 0.8, y: 0.8, z: 0.0})});
-        s.add(Sphere{ center: Vec3{x:  1., y:    0. , z: -1.}, radius:   0.5 , material: Material::Metal(Vec3{x: 0.8, y: 0.6, z: 0.2}, 0.)});
-        s.add(Sphere{ center: Vec3{x: -1., y:    0. , z: -1.}, radius:   0.5 , material: Material::Dielectric(1.5)});
-        s.add(Sphere{ center: Vec3{x: -1., y:    0. , z: -1.}, radius:  -0.45, material: Material::Dielectric(1.5)});
+        s.add(Sphere {
+            center: Vec3 {
+                x: 0.,
+                y: -1000.,
+                z: 0.,
+            },
+            radius: 1000.,
+            material: Material::Lambertian(Vec3 {
+                x: 0.5,
+                y: 0.5,
+                z: 0.5,
+            }),
+        });
+
+        let middle = Vec3 {
+            x: 4.,
+            y: 0.2,
+            z: 0.,
+        };
+
+        let ab_range = {
+            let range_len = f64::from(max_spheres).sqrt().floor() as i32;
+            let from = 0 - (range_len / 2);
+            let to = from + range_len;
+            from..to
+        };
+        for a in ab_range.clone() {
+            for b in ab_range.clone() {
+                let center = Vec3 {
+                    x: f64::from(a) + rng.gen::<f64>() * 0.9,
+                    y: 0.2,
+                    z: f64::from(b) + rng.gen::<f64>() * 0.9,
+                };
+
+                if (center - middle).length() > 0.9 {
+                    let rnd_material = rng.gen_range(0, 100);
+                    match rnd_material {
+                        0...79 => {
+                            // diffuse
+                            let rnd_albedo = Vec3 {
+                                x: rng.gen::<f64>() * rng.gen::<f64>(),
+                                y: rng.gen::<f64>() * rng.gen::<f64>(),
+                                z: rng.gen::<f64>() * rng.gen::<f64>(),
+                            };
+                            s.add(Sphere {
+                                center,
+                                radius: 0.2,
+                                material: Material::Lambertian(rnd_albedo),
+                            });
+                        }
+                        80...94 => {
+                            // metal
+                            let albedo = Vec3 {
+                                x: 0.5 * (1. + rng.gen::<f64>()),
+                                y: 0.5 * (1. + rng.gen::<f64>()),
+                                z: 0.5 * (1. + rng.gen::<f64>()),
+                            };
+                            let fuzz = 0.5 * rng.gen::<f64>();
+                            s.add(Sphere {
+                                center,
+                                radius: 0.2,
+                                material: Material::Metal(albedo, fuzz),
+                            });
+                        }
+                        95...100 => {
+                            // glass
+                            s.add(Sphere {
+                                center,
+                                radius: 0.2,
+                                material: Material::Dielectric(1.5),
+                            });
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+            }
+        }
+
+        s.add(Sphere {
+            center: Vec3 {
+                x: 0.,
+                y: 1.,
+                z: 0.,
+            },
+            radius: 1.,
+            material: Material::Dielectric(1.5),
+        });
+        s.add(Sphere {
+            center: Vec3 {
+                x: -4.,
+                y: 1.,
+                z: 0.,
+            },
+            radius: 1.,
+            material: Material::Lambertian(Vec3 {
+                x: 0.4,
+                y: 0.2,
+                z: 0.1,
+            }),
+        });
+        s.add(Sphere {
+            center: Vec3 {
+                x: 4.,
+                y: 1.,
+                z: 0.,
+            },
+            radius: 1.,
+            material: Material::Metal(
+                Vec3 {
+                    x: 0.7,
+                    y: 0.6,
+                    z: 0.5,
+                },
+                0.,
+            ),
+        });
+
         s
     };
 
     #[rustfmt::skip]
     let camera = {
-        let look_from = Vec3 { x: 3., y: 3., z:  2. };
-        let look_at   = Vec3 { x: 0., y: 0., z: -1. };
-        let view_up   = Vec3 { x: 0., y: 1., z:  0. };
-        let focus_dist = (look_from - look_at).length();
+        let look_from = Vec3 { x: 13., y: 2., z:  3. };
+        let look_at   = Vec3 { x:  0., y: 0., z:  0. };
+        let view_up   = Vec3 { x:  0., y: 1., z:  0. };
 
         Camera::new(
             look_from,
             look_at,
             view_up,
-            90.,
+            30.,
             f64::from(width) / f64::from(height),
-            2.0,
-            focus_dist
+            0.1,
+            10.,
         )
     };
 
@@ -81,9 +216,10 @@ fn main() {
     let mut buf = image::ImageBuffer::new(width, height);
 
     println!(
-        "Rendering {}x{} image with {} rays per pixel = {} total rays",
+        "Rendering {}x{} image with {} spheres and {} rays per pixel = {} total rays",
         width,
         height,
+        shapes.size(),
         rays_per_pixel,
         delimited_int(',', total_rays)
     );

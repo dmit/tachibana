@@ -73,6 +73,10 @@ impl<'a> Shapes<'a> {
     pub fn add<T: Shape + 'a>(&mut self, shape: T) {
         self.0.push(Box::new(shape));
     }
+
+    pub fn size(&self) -> usize {
+        self.0.len()
+    }
 }
 
 impl<'a> Shape for Shapes<'a> {
