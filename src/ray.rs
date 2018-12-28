@@ -21,23 +21,29 @@ pub struct Camera {
 }
 
 impl Camera {
-    pub fn ray(&self, u: f64, v: f64) -> Ray {
-        Ray {
-            origin: self.origin,
-            direction: self.lower_left_corner + self.horizontal * u + self.vertical * v
-                - self.origin,
+    #[rustfmt::skip]
+    pub fn new(look_from: Vec3, look_at: Vec3, view_up: Vec3, v_fov_deg: f64, aspect: f64) -> Self {
+        let theta = v_fov_deg.to_radians();
+        let half_height = (theta / 2.).tan();
+        let half_width = half_height * aspect;
+
+        let w = (look_from - look_at).unit();
+        let u = view_up.cross(w).unit();
+        let v = w.cross(u);
+
+        Camera {
+            origin: look_from,
+            lower_left_corner: look_from - u * half_width - v * half_height - w,
+            horizontal: u * half_width * 2.,
+            vertical: v * half_height * 2.,
         }
     }
-}
 
-impl Default for Camera {
-    #[rustfmt::skip]
-    fn default() -> Self {
-        Camera {
-            origin           : Vec3 { x:  0., y:  0., z:  0. },
-            lower_left_corner: Vec3 { x: -2., y: -1., z: -1. },
-            horizontal       : Vec3 { x:  4., y:  0., z:  0. },
-            vertical         : Vec3 { x:  0., y:  2., z:  0. },
+    pub fn ray(&self, s: f64, t: f64) -> Ray {
+        Ray {
+            origin: self.origin,
+            direction: self.lower_left_corner + self.horizontal * s + self.vertical * t
+                - self.origin,
         }
     }
 }

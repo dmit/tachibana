@@ -45,6 +45,8 @@ fn main() {
         _ => 100,
     };
 
+    let mut rng = Pcg64Mcg::new(rand::thread_rng().gen());
+
     #[rustfmt::skip]
     let shapes: Shapes = {
         let mut s = Shapes::new();
@@ -56,12 +58,17 @@ fn main() {
         s
     };
 
-    let mut buf = image::ImageBuffer::new(width, height);
-    let camera = Camera::default();
-    let mut rng = Pcg64Mcg::new(rand::thread_rng().gen());
+    #[rustfmt::skip]
+    let camera = {
+        let look_from = Vec3 { x: -2., y: 2., z:  1. };
+        let look_at   = Vec3 { x:  0., y: 0., z: -1. };
+        let view_up   = Vec3 { x:  0., y: 1., z:  0. };
+        Camera::new(look_from, look_at, view_up, 90., f64::from(width) / f64::from(height))
+    };
 
     let total_rays = width * height * rays_per_pixel;
     let ten_percent = total_rays / 10;
+    let mut buf = image::ImageBuffer::new(width, height);
 
     println!(
         "Rendering {}x{} image with {} rays per pixel = {} total rays",
