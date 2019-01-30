@@ -11,9 +11,21 @@ $ cargo build --release
 
 ## Run
 ```
-$ cargo run --release <width> <height> <rays per pixel> <number of spheres>
+USAGE:
+    tachibana [OPTIONS] [out_file]
+
+FLAGS:
+        --help       Prints help information
+    -V, --version    Prints version information
+
+OPTIONS:
+    -h, --height <height>                     [default: 1024]
+    -b, --max_bounces <max_bounces>           [default: 50]
+    -s, --max_spheres <max_spheres>           [default: 500]
+    -r, --rays_per_pixel <rays_per_pixel>     [default: 100]
+    -w, --width <width>                       [default: 2048]
 ```
-All parameters are optional. By default the tracer renders a 2048x1024 pixel image with ~500 spheres using 100 rays per pixel. The tracer saves the output to `out.png` in the current directory.
+By default the tracer saves the output to `out.png` in the current directory.
 
 ## License
 The code in this repository is released to the public domain ([CC0 1.0 Universal](https://creativecommons.org/publicdomain/zero/1.0/)), same as the [original code](https://github.com/petershirley/raytracinginoneweekend) this work is based on.

@@ -1,11 +1,13 @@
 #![feature(duration_float)]
 
+use std::io;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::time::Instant;
+
 use image;
 use rand::prelude::*;
 use rayon::prelude::*;
-use std::env;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Instant;
+use structopt::{self, StructOpt};
 use xoshiro::Xoshiro256Plus;
 
 use tachibana::color::Color;
@@ -14,63 +16,29 @@ use tachibana::ray::Camera;
 use tachibana::shape::{Shapes, Sphere};
 use tachibana::vec::Vec3;
 
-fn delimited_int<T: ToString>(delim: char, value: T) -> String {
-    let as_str = value.to_string();
-    let mut iter = as_str.chars().rev().peekable();
-    let mut delimited = String::new();
-    let mut char_count = 0;
-    while let Some(ch) = iter.next() {
-        delimited.insert(0, ch);
-        char_count += 1;
-        if char_count % 3 == 0 && iter.peek().is_some() {
-            delimited.insert(0, delim);
-        }
-    }
-    delimited
+#[derive(Debug, StructOpt)]
+#[structopt(name = "tachibana")]
+struct Cfg {
+    #[structopt(short, long, default_value = "2048")]
+    width: u32,
+
+    #[structopt(short, long, default_value = "1024")]
+    height: u32,
+
+    #[structopt(short, long, default_value = "100")]
+    rays_per_pixel: u32,
+
+    #[structopt(short = "b", long, default_value = "50")]
+    max_bounces: u32,
+
+    #[structopt(short = "s", long, default_value = "500")]
+    max_spheres: u32,
+
+    out_file: Option<String>,
 }
 
-fn main() {
-    let mut args = env::args();
-    let app_name = args.next().unwrap_or_else(|| "raytracer".to_string());
-    let exit_with_usage = |msg: String| -> ! {
-        eprintln!(
-            "{}\n\n{}",
-            msg,
-            format!(
-                "Usage: {} <width> <height> <rays per pixel> <number of spheres>",
-                app_name
-            )
-        );
-        std::process::exit(1)
-    };
-
-    let mut params = args.take(4).map(|x| x.parse::<u32>());
-    let width: u32 = match params.next() {
-        Some(Ok(w)) => w,
-        Some(Err(e)) => exit_with_usage(format!("Invalid format for image width: {}", e)),
-        _ => 2048,
-    };
-    let height: u32 = match params.next() {
-        Some(Ok(h)) => h,
-        Some(Err(e)) => exit_with_usage(format!("Invalid format for image height: {}", e)),
-        _ => width / 2,
-    };
-    let rays_per_pixel: u32 = match params.next() {
-        Some(Ok(n)) => n,
-        Some(Err(e)) => exit_with_usage(format!(
-            "Invalid format for number of rays per pixel: {}",
-            e
-        )),
-        _ => 100,
-    };
-    let max_spheres: u32 = match params.next() {
-        Some(Ok(n)) => n,
-        Some(Err(e)) => exit_with_usage(format!(
-            "Invalid format for maximum number of spheres: {}",
-            e
-        )),
-        _ => 500,
-    };
+fn main() -> io::Result<()> {
+    let cfg = Cfg::from_args();
 
     let rng_seed = rand::thread_rng().gen();
     let mut rng = Xoshiro256Plus::from_seed_u64(rng_seed);
@@ -98,7 +66,7 @@ fn main() {
         };
 
         let ab_range = {
-            let range_len = f64::from(max_spheres).sqrt().floor() as i32;
+            let range_len = f64::from(cfg.max_spheres).sqrt().floor() as i32;
             let from = 0 - (range_len / 2);
             let to = from + range_len;
             from..to
@@ -208,44 +176,45 @@ fn main() {
             look_at,
             view_up,
             30.,
-            f64::from(width) / f64::from(height),
+            f64::from(cfg.width) / f64::from(cfg.height),
             0.1,
             10.,
         )
     };
 
-    let total_rays = width * height * rays_per_pixel;
+    let total_rays = cfg.width * cfg.height * cfg.rays_per_pixel;
     let ten_percent = total_rays as usize / 10;
-    let mut buf = image::ImageBuffer::new(width, height);
+    let mut buf = image::ImageBuffer::new(cfg.width, cfg.height);
 
     println!(
-        "Rendering {}x{} image with {} spheres and {} rays per pixel = {} total rays (seed: {:x})",
-        width,
-        height,
+        "Rendering {}x{} image with {} spheres and {} rays per pixel ({} max bounces per ray) = {} total rays (seed: {:x})",
+        cfg.width,
+        cfg.height,
         shapes.size(),
-        rays_per_pixel,
-        delimited_int(',', total_rays),
+        cfg.rays_per_pixel,
+        cfg.max_bounces,
+        tachibana::delimited_int(',', total_rays),
         rng_seed,
     );
 
     let rays_counter = AtomicUsize::new(0);
     let start_time = Instant::now();
 
-    let coords: Vec<(u32, u32)> = (0..height)
-        .flat_map(|y| (0..width).map(move |x| (x, y)))
+    let coords: Vec<(u32, u32)> = (0..cfg.height)
+        .flat_map(|y| (0..cfg.width).map(move |x| (x, y)))
         .collect();
 
     let pixels: Vec<Color> = coords
         .par_iter()
         .map(|&(x, y)| {
-            let y = height - y - 1; // tracer renders bottom to top
+            let y = cfg.height - y - 1; // tracer renders bottom to top
             let mut rng = Xoshiro256Plus::from_seed_u64(rand::thread_rng().gen());
 
-            let c_vec = (0..rays_per_pixel).fold(Vec3::ZERO, |acc, _| {
-                let u = (f64::from(x) + rng.gen::<f64>()) / f64::from(width);
-                let v = (f64::from(y) + rng.gen::<f64>()) / f64::from(height);
+            let c_vec = (0..cfg.rays_per_pixel).fold(Vec3::ZERO, |acc, _| {
+                let u = (f64::from(x) + rng.gen::<f64>()) / f64::from(cfg.width);
+                let v = (f64::from(y) + rng.gen::<f64>()) / f64::from(cfg.height);
                 let ray = camera.ray(u, v, &mut rng);
-                let c = tachibana::color_vec(&ray, &shapes, 0, &mut rng);
+                let c = tachibana::color_vec(&ray, &shapes, cfg.max_bounces, 0, &mut rng);
 
                 let rays_rendered = rays_counter.fetch_add(1, Ordering::Relaxed) + 1;
                 if rays_rendered % ten_percent == 0 {
@@ -256,21 +225,24 @@ fn main() {
                         rays_rendered / ten_percent,
                         duration.as_secs(),
                         duration.subsec_millis(),
-                        delimited_int(',', rays_per_s.round() as i64)
+                        tachibana::delimited_int(',', rays_per_s.round() as i64)
                     );
                 }
 
                 acc + c
-            }) / f64::from(rays_per_pixel);
+            }) / f64::from(cfg.rays_per_pixel);
 
-            c_vec.map(|f| f.sqrt()).into()
+            c_vec.map(tachibana::gamma_linear_to_srgb).into()
         })
         .collect();
 
     buf.enumerate_pixels_mut().for_each(|(x, y, p)| {
-        let c = pixels[(y * width + x) as usize];
+        let c = pixels[(y * cfg.width + x) as usize];
         *p = image::Rgb(c.as_array());
     });
 
-    buf.save("out.png").expect("Unable to write output file");
+    let filename = cfg.out_file.unwrap_or_else(|| "out.png".to_string());
+    buf.save(&filename)?;
+
+    Ok(())
 }
