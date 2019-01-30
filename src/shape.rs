@@ -6,25 +6,25 @@ use crate::vec::Vec3;
 
 #[derive(Clone, Copy, Debug)]
 pub struct HitRecord {
-    pub distance: f64,
+    pub distance: f32,
     pub point: Vec3,
     pub normal: Vec3,
     pub material: Material,
 }
 
 pub trait Shape: Debug + Sync {
-    fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord>;
+    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord>;
 }
 
 #[derive(Clone, Copy, Debug)]
 pub struct Sphere {
     pub center: Vec3,
-    pub radius: f64,
+    pub radius: f32,
     pub material: Material,
 }
 
 impl Shape for Sphere {
-    fn hit(&self, ray: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
+    fn hit(&self, ray: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
         let oc = ray.origin - self.center;
         let a = ray.direction.dot(ray.direction);
         let b = oc.dot(ray.direction);
@@ -80,7 +80,7 @@ impl<'a> Shapes<'a> {
 }
 
 impl<'a> Shape for Shapes<'a> {
-    fn hit(&self, r: &Ray, t_min: f64, t_max: f64) -> Option<HitRecord> {
+    fn hit(&self, r: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
         self.0.iter().fold(None, |acc, s| {
             s.hit(r, t_min, acc.map(|r| r.distance).unwrap_or(t_max))
                 .or(acc)

@@ -6,9 +6,9 @@ use crate::vec::Vec3;
 
 #[derive(Clone, Copy, Debug)]
 pub enum Material {
-    Dielectric(f64),
+    Dielectric(f32),
     Lambertian(Vec3),
-    Metal(Vec3, f64),
+    Metal(Vec3, f32),
 }
 
 impl Material {
@@ -18,7 +18,7 @@ impl Material {
     }
 
     #[inline]
-    fn refract(v: &Vec3, n: &Vec3, ni_over_nt: f64) -> Option<Vec3> {
+    fn refract(v: &Vec3, n: &Vec3, ni_over_nt: f32) -> Option<Vec3> {
         let uv = v.unit();
         let dt = uv.dot(*n);
         let discriminant = 1. - ni_over_nt * ni_over_nt * (1. - dt * dt);
@@ -32,9 +32,25 @@ impl Material {
     }
 
     #[inline]
-    fn schlick(cosine: f64, ref_idx: f64) -> f64 {
+    fn schlick(cosine: f32, ref_idx: f32) -> f32 {
         let r0 = (1. - ref_idx) / (1. + ref_idx);
         r0 * r0 + (1. - r0 * r0) * (1. - cosine).powi(5)
+    }
+
+    fn random_in_unit_sphere(rng: &mut impl Rng) -> Vec3 {
+        let mut p: Vec3;
+        while {
+            let rnd = Vec3 {
+                x: rng.gen(),
+                y: rng.gen(),
+                z: rng.gen(),
+            };
+            p = rnd * 2. - Vec3::ONE;
+
+            p.squared_length() >= 1.
+        } {}
+
+        p
     }
 
     pub fn scatter(
@@ -61,7 +77,7 @@ impl Material {
                     Material::refract(&ray_in.direction, &outward_normal, ni_over_nt)
                 {
                     let reflect_prob = Material::schlick(cosine, ref_idx);
-                    let rnd: f64 = rng.gen();
+                    let rnd: f32 = rng.gen();
 
                     let scattered = if rnd < reflect_prob {
                         let reflected = Material::reflect(&ray_in.direction, &rec.normal);
@@ -87,7 +103,7 @@ impl Material {
             }
 
             Lambertian(albedo) => {
-                let rnd = crate::random_in_unit_sphere(rng);
+                let rnd = Self::random_in_unit_sphere(rng);
                 let target = rec.point + rec.normal + rnd;
                 let scattered = Ray {
                     origin: rec.point,
@@ -99,7 +115,7 @@ impl Material {
             Metal(albedo, fuzz) => {
                 let fuzz = fuzz.min(1.);
                 let reflected = Material::reflect(&ray_in.direction.unit(), &rec.normal);
-                let rnd = crate::random_in_unit_sphere(rng);
+                let rnd = Self::random_in_unit_sphere(rng);
                 let scattered = Ray {
                     origin: rec.point,
                     direction: reflected + rnd * fuzz,
