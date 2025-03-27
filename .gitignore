@@ -1,5 +1,4 @@
 /target
-**/*.rs.bk
 
 # output of the binary
-out.png
+*.png

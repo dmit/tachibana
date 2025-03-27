@@ -1,8 +1,6 @@
 use std::fmt::Debug;
 
-use crate::material::Material;
-use crate::ray::Ray;
-use crate::vec::Vec3;
+use crate::{material::Material, ray::Ray, vec::Vec3};
 
 #[derive(Clone, Copy, Debug)]
 pub struct HitRecord {
@@ -62,7 +60,7 @@ impl Shape for Sphere {
 }
 
 #[derive(Debug, Default)]
-pub struct Shapes<'a>(Vec<Box<Shape + 'a>>);
+pub struct Shapes<'a>(Vec<Box<dyn Shape + 'a>>);
 
 impl<'a> Shapes<'a> {
     pub fn new() -> Shapes<'a> {
@@ -70,20 +68,15 @@ impl<'a> Shapes<'a> {
         Shapes(v)
     }
 
-    pub fn add<T: Shape + 'a>(&mut self, shape: T) {
-        self.0.push(Box::new(shape));
-    }
+    pub fn add<T: Shape + 'a>(&mut self, shape: T) { self.0.push(Box::new(shape)); }
 
-    pub fn size(&self) -> usize {
-        self.0.len()
-    }
+    pub fn size(&self) -> usize { self.0.len() }
 }
 
 impl<'a> Shape for Shapes<'a> {
     fn hit(&self, r: &Ray, t_min: f32, t_max: f32) -> Option<HitRecord> {
-        self.0.iter().fold(None, |acc, s| {
-            s.hit(r, t_min, acc.map(|r| r.distance).unwrap_or(t_max))
-                .or(acc)
-        })
+        self.0
+            .iter()
+            .fold(None, |acc, s| s.hit(r, t_min, acc.map(|r| r.distance).unwrap_or(t_max)).or(acc))
     }
 }

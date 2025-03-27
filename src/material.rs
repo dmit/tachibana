@@ -1,8 +1,6 @@
-use rand::Rng;
+use fastrand::Rng;
 
-use crate::ray::Ray;
-use crate::shape::HitRecord;
-use crate::vec::Vec3;
+use crate::{ray::Ray, shape::HitRecord, vec::Vec3};
 
 #[derive(Clone, Copy, Debug)]
 pub enum Material {
@@ -13,9 +11,7 @@ pub enum Material {
 
 impl Material {
     #[inline]
-    fn reflect(v: &Vec3, n: &Vec3) -> Vec3 {
-        *v - *n * v.dot(*n) * 2.
-    }
+    fn reflect(v: &Vec3, n: &Vec3) -> Vec3 { *v - *n * v.dot(*n) * 2. }
 
     #[inline]
     fn refract(v: &Vec3, n: &Vec3, ni_over_nt: f32) -> Option<Vec3> {
@@ -37,14 +33,10 @@ impl Material {
         r0 * r0 + (1. - r0 * r0) * (1. - cosine).powi(5)
     }
 
-    fn random_in_unit_sphere(rng: &mut impl Rng) -> Vec3 {
+    fn random_in_unit_sphere(rng: &mut Rng) -> Vec3 {
         let mut p: Vec3;
         while {
-            let rnd = Vec3 {
-                x: rng.gen(),
-                y: rng.gen(),
-                z: rng.gen(),
-            };
+            let rnd = Vec3 { x: rng.f32(), y: rng.f32(), z: rng.f32() };
             p = rnd * 2. - Vec3::ONE;
 
             p.squared_length() >= 1.
@@ -53,12 +45,7 @@ impl Material {
         p
     }
 
-    pub fn scatter(
-        &self,
-        ray_in: &Ray,
-        rec: &HitRecord,
-        rng: &mut impl Rng,
-    ) -> Option<(Vec3, Ray)> {
+    pub fn scatter(&self, ray_in: &Ray, rec: &HitRecord, rng: &mut Rng) -> Option<(Vec3, Ray)> {
         use self::Material::*;
 
         match *self {
@@ -77,27 +64,17 @@ impl Material {
                     Material::refract(&ray_in.direction, &outward_normal, ni_over_nt)
                 {
                     let reflect_prob = Material::schlick(cosine, ref_idx);
-                    let rnd: f32 = rng.gen();
 
-                    let scattered = if rnd < reflect_prob {
+                    let scattered = if rng.f32() < reflect_prob {
                         let reflected = Material::reflect(&ray_in.direction, &rec.normal);
-                        Ray {
-                            origin: rec.point,
-                            direction: reflected,
-                        }
+                        Ray { origin: rec.point, direction: reflected }
                     } else {
-                        Ray {
-                            origin: rec.point,
-                            direction: refracted,
-                        }
+                        Ray { origin: rec.point, direction: refracted }
                     };
                     Some((Vec3::ONE, scattered))
                 } else {
                     let reflected = Material::reflect(&ray_in.direction, &rec.normal);
-                    let scattered = Ray {
-                        origin: rec.point,
-                        direction: reflected,
-                    };
+                    let scattered = Ray { origin: rec.point, direction: reflected };
                     Some((Vec3::ONE, scattered))
                 }
             }
@@ -105,10 +82,7 @@ impl Material {
             Lambertian(albedo) => {
                 let rnd = Self::random_in_unit_sphere(rng);
                 let target = rec.point + rec.normal + rnd;
-                let scattered = Ray {
-                    origin: rec.point,
-                    direction: target - rec.point,
-                };
+                let scattered = Ray { origin: rec.point, direction: target - rec.point };
                 Some((albedo, scattered))
             }
 
@@ -116,10 +90,7 @@ impl Material {
                 let fuzz = fuzz.min(1.);
                 let reflected = Material::reflect(&ray_in.direction.unit(), &rec.normal);
                 let rnd = Self::random_in_unit_sphere(rng);
-                let scattered = Ray {
-                    origin: rec.point,
-                    direction: reflected + rnd * fuzz,
-                };
+                let scattered = Ray { origin: rec.point, direction: reflected + rnd * fuzz };
 
                 if scattered.direction.dot(rec.normal) > 0. {
                     Some((albedo, scattered))

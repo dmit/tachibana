@@ -1,17 +1,17 @@
 [package]
 name = "tachibana"
 version = "0.1.0"
-authors = ["Dmitri Melnikov"]
-license = "CC0-1.0"
-edition = "2018"
+license = "0BSD"
+edition = "2024"
+publish = false
 
 [dependencies]
-image = "0.21"
-rand = "0.6"
-rayon = "1.0"
-structopt = "0.2"
-xoshiro = "0.0.5"
+argh = "0.1.13"
+fastrand = "2.3.0"
+image = { version = "0.25.6", default-features = false, features = ["png"] }
+rayon = "1.10.0"
 
 [profile.release]
 debug = true # for profiling
 lto = true
+panic = "abort"

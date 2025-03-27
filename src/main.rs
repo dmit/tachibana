@@ -1,51 +1,62 @@
-#![feature(duration_float)]
+use std::{
+    error::Error,
+    path::PathBuf,
+    sync::atomic::{AtomicUsize, Ordering},
+    time::Instant,
+};
 
-use std::io;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::time::Instant;
-
-use image;
-use rand::prelude::*;
+use argh::FromArgs;
+use fastrand::Rng;
 use rayon::prelude::*;
-use structopt::{self, StructOpt};
-use xoshiro::Xoshiro256Plus;
+use tachibana::{
+    color::Color,
+    material::Material,
+    ray::Camera,
+    shape::{Shapes, Sphere},
+    tracer::Tracer,
+    vec::Vec3,
+};
 
-use tachibana::color::Color;
-use tachibana::material::Material;
-use tachibana::ray::Camera;
-use tachibana::shape::{Shapes, Sphere};
-use tachibana::tracer::Tracer;
-use tachibana::vec::Vec3;
-
-#[derive(Debug, StructOpt)]
-#[structopt(name = "tachibana")]
+#[derive(Debug, FromArgs)]
+#[argh(name = "tachibana", description = "Tachibana - a toy ray tracer")]
 struct Cfg {
-    #[structopt(short = "w", long, default_value = "2048")]
+    #[argh(option, short = 'w', description = "output image width in pixels", default = "2048")]
     width: u32,
 
-    #[structopt(short = "h", long, default_value = "1024")]
+    #[argh(option, short = 'h', description = "output image height in pixels", default = "1024")]
     height: u32,
 
-    #[structopt(short = "r", long, default_value = "100")]
+    #[argh(option, short = 'r', description = "rays per pixel", default = "100")]
     rays_per_pixel: u32,
 
-    #[structopt(short = "b", long, default_value = "50")]
+    #[argh(
+        option,
+        short = 'b',
+        description = "maximum number of bounces a ray performs",
+        default = "50"
+    )]
     max_bounces: u32,
 
-    #[structopt(short = "s", long, default_value = "500")]
+    #[argh(
+        option,
+        short = 's',
+        description = "maximum number of randomly placed spheres in the scene",
+        default = "500"
+    )]
     max_spheres: u32,
 
-    #[structopt(short = "c", long, default_value = "1")]
+    #[argh(option, short = 'c', description = "parallelism chunk size", default = "1")]
     chunk_size: usize,
 
-    out_file: Option<String>,
+    #[argh(positional, default = r#"PathBuf::from("out.png")"#)]
+    out_file: PathBuf,
 }
 
-fn main() -> io::Result<()> {
-    let cfg = Cfg::from_args();
+fn main() -> Result<(), Box<dyn Error>> {
+    let cfg: Cfg = argh::from_env();
 
-    let rng_seed = rand::thread_rng().gen();
-    let mut rng = Xoshiro256Plus::from_seed_u64(rng_seed);
+    let rng_seed = fastrand::u64(..);
+    let mut rng = Rng::with_seed(rng_seed);
 
     let shapes = gen_scene(cfg.max_spheres, &mut rng);
 
@@ -81,27 +92,20 @@ fn main() -> io::Result<()> {
         rng_seed,
     );
 
-    let tracer = Tracer::new(
-        &camera,
-        &shapes,
-        cfg.width,
-        cfg.height,
-        cfg.max_bounces,
-    );
+    let tracer = Tracer::new(&camera, &shapes, cfg.width, cfg.height, cfg.max_bounces);
 
     let ray_counter = AtomicUsize::new(0);
     let chunk_counter = AtomicUsize::new(0);
 
-    let coords: Vec<(u32, u32)> = (0..cfg.height)
-        .flat_map(|y| (0..cfg.width).map(move |x| (x, y)))
-        .collect();
+    let coords: Vec<(u32, u32)> =
+        (0..cfg.height).flat_map(|y| (0..cfg.width).map(move |x| (x, y))).collect();
     let ten_percent = coords.len() / cfg.chunk_size as usize / 10;
 
     let start_time = Instant::now();
     let pixels: Vec<Color> = coords
         .par_chunks(cfg.chunk_size)
         .flat_map(|chunk: &[(u32, u32)]| {
-            let mut rng = Xoshiro256Plus::from_seed_u64(rand::thread_rng().gen());
+            let mut rng = Rng::new();
             let pixels: Vec<Color> = chunk
                 .iter()
                 .map(|&(x, y)| {
@@ -116,7 +120,7 @@ fn main() -> io::Result<()> {
                 ray_counter.fetch_add(rays_in_this_chunk, Ordering::Relaxed) + rays_in_this_chunk;
             if chunks_processed % ten_percent == 0 {
                 let duration = start_time.elapsed();
-                let rays_per_s = rays_rendered as f64 / duration.as_float_secs();
+                let rays_per_s = rays_rendered as f64 / duration.as_secs_f64();
                 let micros_per_ray = duration.as_micros() as f32 / rays_rendered as f32;
                 println!(
                     "{:3}0% {:4}.{:0<3}s ({} rays/s, {:.3} μs/ray)",
@@ -138,33 +142,20 @@ fn main() -> io::Result<()> {
         *p = image::Rgb(c.as_array());
     });
 
-    let filename = cfg.out_file.unwrap_or_else(|| "out.png".to_string());
-    buf.save(&filename)?;
+    buf.save(&cfg.out_file)?;
 
     Ok(())
 }
 
-fn gen_scene(max_spheres: u32, rng: &mut impl Rng) -> Shapes {
+fn gen_scene(max_spheres: u32, rng: &mut Rng) -> Shapes {
     let mut s = Shapes::new();
     s.add(Sphere {
-        center: Vec3 {
-            x: 0.,
-            y: -1000.,
-            z: 0.,
-        },
+        center: Vec3 { x: 0., y: -1000., z: 0. },
         radius: 1000.,
-        material: Material::Lambertian(Vec3 {
-            x: 0.5,
-            y: 0.5,
-            z: 0.5,
-        }),
+        material: Material::Lambertian(Vec3 { x: 0.5, y: 0.5, z: 0.5 }),
     });
 
-    let middle = Vec3 {
-        x: 4.,
-        y: 0.2,
-        z: 0.,
-    };
+    let middle = Vec3 { x: 4., y: 0.2, z: 0. };
 
     let ab_range = {
         let range_len = f64::from(max_spheres).sqrt().floor() as i32;
@@ -174,21 +165,18 @@ fn gen_scene(max_spheres: u32, rng: &mut impl Rng) -> Shapes {
     };
     for a in ab_range.clone() {
         for b in ab_range.clone() {
-            let center = Vec3 {
-                x: a as f32 + rng.gen::<f32>() * 0.9,
-                y: 0.2,
-                z: b as f32 + rng.gen::<f32>() * 0.9,
-            };
+            let center =
+                Vec3 { x: a as f32 + rng.f32() * 0.9, y: 0.2, z: b as f32 + rng.f32() * 0.9 };
 
             if (center - middle).length() > 0.9 {
-                let rnd_material = rng.gen_range(0, 100);
+                let rnd_material = rng.u8(0..=100);
                 match rnd_material {
-                    0...79 => {
+                    0..=79 => {
                         // diffuse
                         let rnd_albedo = Vec3 {
-                            x: rng.gen::<f32>() * rng.gen::<f32>(),
-                            y: rng.gen::<f32>() * rng.gen::<f32>(),
-                            z: rng.gen::<f32>() * rng.gen::<f32>(),
+                            x: rng.f32() * rng.f32(),
+                            y: rng.f32() * rng.f32(),
+                            z: rng.f32() * rng.f32(),
                         };
                         s.add(Sphere {
                             center,
@@ -196,27 +184,23 @@ fn gen_scene(max_spheres: u32, rng: &mut impl Rng) -> Shapes {
                             material: Material::Lambertian(rnd_albedo),
                         });
                     }
-                    80...94 => {
+                    80..=94 => {
                         // metal
                         let albedo = Vec3 {
-                            x: 0.5 * (1. + rng.gen::<f32>()),
-                            y: 0.5 * (1. + rng.gen::<f32>()),
-                            z: 0.5 * (1. + rng.gen::<f32>()),
+                            x: 0.5 * (1. + rng.f32()),
+                            y: 0.5 * (1. + rng.f32()),
+                            z: 0.5 * (1. + rng.f32()),
                         };
-                        let fuzz = 0.5 * rng.gen::<f32>();
+                        let fuzz = 0.5 * rng.f32();
                         s.add(Sphere {
                             center,
                             radius: 0.2,
                             material: Material::Metal(albedo, fuzz),
                         });
                     }
-                    95...100 => {
+                    95..=100 => {
                         // glass
-                        s.add(Sphere {
-                            center,
-                            radius: 0.2,
-                            material: Material::Dielectric(1.5),
-                        });
+                        s.add(Sphere { center, radius: 0.2, material: Material::Dielectric(1.5) });
                     }
                     _ => unreachable!(),
                 }
@@ -225,42 +209,19 @@ fn gen_scene(max_spheres: u32, rng: &mut impl Rng) -> Shapes {
     }
 
     s.add(Sphere {
-        center: Vec3 {
-            x: 0.,
-            y: 1.,
-            z: 0.,
-        },
+        center: Vec3 { x: 0., y: 1., z: 0. },
         radius: 1.,
         material: Material::Dielectric(1.5),
     });
     s.add(Sphere {
-        center: Vec3 {
-            x: -4.,
-            y: 1.,
-            z: 0.,
-        },
+        center: Vec3 { x: -4., y: 1., z: 0. },
         radius: 1.,
-        material: Material::Lambertian(Vec3 {
-            x: 0.4,
-            y: 0.2,
-            z: 0.1,
-        }),
+        material: Material::Lambertian(Vec3 { x: 0.4, y: 0.2, z: 0.1 }),
     });
     s.add(Sphere {
-        center: Vec3 {
-            x: 4.,
-            y: 1.,
-            z: 0.,
-        },
+        center: Vec3 { x: 4., y: 1., z: 0. },
         radius: 1.,
-        material: Material::Metal(
-            Vec3 {
-                x: 0.7,
-                y: 0.6,
-                z: 0.5,
-            },
-            0.,
-        ),
+        material: Material::Metal(Vec3 { x: 0.7, y: 0.6, z: 0.5 }, 0.),
     });
 
     s

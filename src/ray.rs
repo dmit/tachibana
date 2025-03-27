@@ -1,4 +1,4 @@
-use rand::Rng;
+use fastrand::Rng;
 
 use crate::vec::Vec3;
 
@@ -9,9 +9,7 @@ pub struct Ray {
 }
 
 impl Ray {
-    pub fn point_at(self, t: f32) -> Vec3 {
-        self.origin + self.direction * t
-    }
+    pub fn point_at(self, t: f32) -> Vec3 { self.origin + self.direction * t }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -61,20 +59,12 @@ impl Camera {
         }
     }
 
-    fn random_in_unit_disk(rng: &mut impl Rng) -> Vec3 {
-        let v = Vec3 {
-            x: 1.,
-            y: 1.,
-            z: 0.,
-        };
+    fn random_in_unit_disk(rng: &mut Rng) -> Vec3 {
+        let v = Vec3 { x: 1., y: 1., z: 0. };
 
         let mut p: Vec3;
         while {
-            let rnd = Vec3 {
-                x: rng.gen(),
-                y: rng.gen(),
-                z: 0.,
-            };
+            let rnd = Vec3 { x: rng.f32(), y: rng.f32(), z: 0. };
             p = rnd * 2. - v;
 
             p.dot(p) >= 1.
@@ -83,7 +73,7 @@ impl Camera {
         p
     }
 
-    pub fn ray(&self, s: f32, t: f32, rng: &mut impl Rng) -> Ray {
+    pub fn ray(&self, s: f32, t: f32, rng: &mut Rng) -> Ray {
         let rd = Camera::random_in_unit_disk(rng) * self.lens_radius;
         let offset = self.u * rd.x + self.v * rd.y;
         Ray {
